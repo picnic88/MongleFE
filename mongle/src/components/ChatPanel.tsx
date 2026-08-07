@@ -1,5 +1,5 @@
 import { Info, Minus, SendHorizontal } from 'lucide-react'
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReportStatus } from '../types/report'
 
 type ChatMessage = {
@@ -90,16 +90,35 @@ export function ChatPanel({ reportStatus }: ChatPanelProps) {
   const [draft, setDraft] = useState('')
   const [sentMessages, setSentMessages] = useState<ChatMessage[]>([])
   const messageListRef = useRef<HTMLDivElement>(null)
+  const messageContentRef = useRef<HTMLDivElement>(null)
 
   const messages = useMemo(
     () => [...initialMessages, ...sentMessages],
     [initialMessages, sentMessages],
   )
 
-  useLayoutEffect(() => {
+  const scrollToLatestMessage = useCallback(() => {
     const messageList = messageListRef.current
     if (messageList) messageList.scrollTop = messageList.scrollHeight
-  }, [messages.length])
+  }, [])
+
+  useLayoutEffect(() => {
+    scrollToLatestMessage()
+    const nextFrame = window.requestAnimationFrame(scrollToLatestMessage)
+    return () => window.cancelAnimationFrame(nextFrame)
+  }, [messages, scrollToLatestMessage])
+
+  useEffect(() => {
+    const messageList = messageListRef.current
+    const messageContent = messageContentRef.current
+    if (!messageList || !messageContent || !('ResizeObserver' in window)) return
+
+    const resizeObserver = new ResizeObserver(scrollToLatestMessage)
+    resizeObserver.observe(messageList)
+    resizeObserver.observe(messageContent)
+
+    return () => resizeObserver.disconnect()
+  }, [scrollToLatestMessage])
 
   const sendMessage = () => {
     const message = draft.trim()
@@ -148,7 +167,7 @@ export function ChatPanel({ reportStatus }: ChatPanelProps) {
         aria-live="polite"
         className="min-h-[260px] flex-1 overflow-y-auto px-7 py-5"
       >
-        <div className="space-y-5">
+        <div ref={messageContentRef} className="space-y-5">
           {messages.map((message) => (
             <ChatBubble key={message.id} message={message} reportStatus={reportStatus} />
           ))}

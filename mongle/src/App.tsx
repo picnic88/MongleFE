@@ -1,121 +1,63 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useEffect, useState } from 'react'
+import { AfterReport } from './components/AfterReport'
+import { BeforeReport } from './components/BeforeReport'
+import { ChatPanel } from './components/ChatPanel'
+import { SiteFooter, SiteHeader } from './components/SiteChrome'
+
+export type ReportStatus = 'before' | 'after'
+
+function getReportStatus(): ReportStatus {
+  return new URLSearchParams(window.location.search).get('report') === 'after'
+    ? 'after'
+    : 'before'
+}
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [reportStatus, setReportStatus] = useState<ReportStatus>(getReportStatus)
+
+  useEffect(() => {
+    const syncFromUrl = () => setReportStatus(getReportStatus())
+    window.addEventListener('popstate', syncFromUrl)
+    return () => window.removeEventListener('popstate', syncFromUrl)
+  }, [])
+
+  const changeReportStatus = (status: ReportStatus) => {
+    const url = new URL(window.location.href)
+    url.searchParams.set('report', status)
+    window.history.pushState({}, '', url)
+    setReportStatus(status)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <div className="min-h-screen bg-[#fefeff] text-[#1f242e]">
+      <SiteHeader />
 
-      <div className="ticks"></div>
+      <main className="mx-auto grid w-full max-w-[1840px] grid-cols-1 gap-8 px-5 py-6 sm:px-8 xl:grid-cols-[minmax(0,1fr)_minmax(400px,500px)] xl:items-start xl:gap-8 3xl:grid-cols-[1170px_548px] 3xl:gap-[94px] 3xl:px-4">
+        <section className="min-w-0">
+          <div className="mb-9 pt-3">
+            <h1 className="text-[26px] font-bold leading-[1.45] sm:text-[30px]">
+              안녕하세요 서정환 님!
+            </h1>
+            <p className="mt-2 text-[15px] leading-7 text-[#616978] sm:text-lg">
+              AI 수면 리포트와 상담을 통해 나에게 맞는 수면 환경을 알아보세요.
+            </p>
+          </div>
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+          {reportStatus === 'before' ? (
+            <BeforeReport onGenerate={() => changeReportStatus('after')} />
+          ) : (
+            <AfterReport />
+          )}
+        </section>
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+        <aside className="min-w-0 xl:sticky xl:top-[92px] xl:h-[calc(100vh-116px)] xl:min-h-[760px] xl:max-h-[1255px]">
+          <ChatPanel reportStatus={reportStatus} />
+        </aside>
+      </main>
+
+      <SiteFooter />
+    </div>
   )
 }
 

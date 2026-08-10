@@ -1,8 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap');
+@import './fonts/pretendard.css';
 @import 'tailwindcss';
 
 @theme {
-  --font-sans: 'Noto Sans KR', 'Segoe UI', sans-serif;
+  --font-sans: 'Pretendard', 'Segoe UI', sans-serif;
   --breakpoint-3xl: 112.5rem;
 }
 

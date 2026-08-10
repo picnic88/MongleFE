@@ -3,7 +3,7 @@ import { Header } from "./component/Header";
 import { Footer } from "./component/Footer";
 import brand from "./assets/brandBear.png";
 import reportImg from "./assets/report.png";
-<link rel="stylesheet" href="./fonts/pretendard.css"></link>
+
 /**
  * Mongle 대시보드 – 1920px 기준 픽셀 단위 레이아웃
  * 원본 디자인 이미지(1590x1226)를 1920px 폭 기준으로 스케일링(x1.2075)하여

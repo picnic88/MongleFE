@@ -1,6 +1,6 @@
 export function SiteHeader() {
   return (
-    <header className="sticky top-0 z-50 h-[76px] border-b border-[#e3e8f0] bg-white/95 backdrop-blur">
+    <header className="sticky top-0 z-50 h-[79px] border-b border-[#e3e8f0] bg-white/95 backdrop-blur">
       <div className="mx-auto flex h-full max-w-[1840px] items-center px-5 sm:px-8 3xl:px-0">
         <a href="/" className="flex shrink-0 items-center gap-4 text-[#1f242e] no-underline">
           <span className="flex size-12 items-center justify-center overflow-hidden rounded-md bg-[#edf3ff]">

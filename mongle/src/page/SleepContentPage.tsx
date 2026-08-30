@@ -1,21 +1,12 @@
 import { useMemo, useState } from "react";
 import { Header } from "../component/Header";
 import { Footer } from "../component/Footer";
-
-/**
- * 잠 잘오는 컨텐츠 추천 페이지
- *
- * - 기본 12개 슬롯으로 시작, 4열 그리드로 무한히 추가 가능
- * - '나만의 꿀잠템 공유하기' → 유튜브 링크 등록 팝업
- *   → oEmbed API로 제목/썸네일 자동 추출 → 회색 박스 자리에 꽉 채워서 표시
- * - 카드를 클릭하면 조회수 +1, 실제 영상은 새 탭에서 재생
- * - 조회수 상위 3개를 1/2/3위로 상단에 노출
- */
+import api from "../api/api";
 
 // ---------------- 타입 ----------------
 type VideoItem = {
     id: string;
-    videoId: string | null; // 유튜브 videoId (등록 전 placeholder는 null)
+    videoId: string | null;
     url: string | null;
     title: string;
     thumbnail: string | null;
@@ -31,28 +22,47 @@ function extractYoutubeId(rawUrl: string): string | null {
         if (host === "youtu.be") {
             return url.pathname.slice(1) || null;
         }
+
         if (host === "youtube.com" || host === "m.youtube.com") {
-            if (url.pathname === "/watch") return url.searchParams.get("v");
-            if (url.pathname.startsWith("/embed/")) return url.pathname.split("/embed/")[1];
-            if (url.pathname.startsWith("/shorts/")) return url.pathname.split("/shorts/")[1];
+            if (url.pathname === "/watch") {
+                return url.searchParams.get("v");
+            }
+
+            if (url.pathname.startsWith("/embed/")) {
+                return url.pathname.split("/embed/")[1];
+            }
+
+            if (url.pathname.startsWith("/shorts/")) {
+                return url.pathname.split("/shorts/")[1];
+            }
         }
+
         return null;
     } catch {
         return null;
     }
 }
 
-async function fetchYoutubeInfo(videoId: string): Promise<{ title: string; thumbnail: string }> {
-    const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(
-        `https://www.youtube.com/watch?v=${videoId}`
-    )}&format=json`;
+async function fetchYoutubeInfo(
+    videoId: string
+): Promise<{ title: string; thumbnail: string }> {
+    const oembedUrl =
+        `https://www.youtube.com/oembed?url=${encodeURIComponent(
+            `https://www.youtube.com/watch?v=${videoId}`
+        )}&format=json`;
 
     const res = await fetch(oembedUrl);
-    if (!res.ok) throw new Error("영상 정보를 가져오지 못했어요. 링크를 다시 확인해주세요.");
+
+    if (!res.ok) {
+        throw new Error(
+            "영상 정보를 가져오지 못했어요. 링크를 다시 확인해주세요."
+        );
+    }
+
     const data = await res.json();
+
     return {
         title: data.title as string,
-        // hqdefault가 항상 존재하므로 안정적으로 사용 (maxresdefault는 없는 영상도 있음)
         thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
     };
 }
@@ -69,7 +79,7 @@ function createDefaultVideos(): VideoItem[] {
     }));
 }
 
-// ---------------- 썸네일 박스 (공용) ----------------
+// ---------------- 썸네일 ----------------
 function ThumbnailBox({
     item,
     width,
@@ -81,7 +91,13 @@ function ThumbnailBox({
 }) {
     return (
         <div
-            className="rounded-md bg-[#D9D9D9] overflow-hidden flex items-center justify-center"
+            className="
+                rounded-[12px]
+                bg-[#F1F3F8]
+                overflow-hidden
+                flex items-center justify-center
+                border border-[#E4E8F0]
+            "
             style={{ width, height }}
         >
             {item.thumbnail ? (
@@ -91,15 +107,26 @@ function ThumbnailBox({
                     className="w-full h-full object-cover"
                 />
             ) : (
-                <span className="text-slate-400 text-sm"
-                    style={{ fontFamily: 'Pretendard', fontWeight: "400" }}>영상을 등록해주세요</span>
+                <span
+                    className="text-[14px] text-[#A0A7B5]"
+                    style={{
+                        fontFamily: "Pretendard",
+                        fontWeight: "400",
+                    }}
+                >
+                    영상을 등록해주세요
+                </span>
             )}
         </div>
     );
 }
 
-// ---------------- 상단 랭킹 카드 ----------------
-const RANK_COLORS = ["#FFC94D", "#C7CBD1", "#D79A66"]; // 금/은/동
+// ---------------- TOP 3 카드 ----------------
+const RANK_COLORS = [
+    "#F3D98B",
+    "#D8DCE3",
+    "#D6A47A",
+];
 
 function RankedCard({
     item,
@@ -111,34 +138,123 @@ function RankedCard({
     onClick: () => void;
 }) {
     return (
-        <button onClick={onClick} className="relative w-[360px] text-left"
-            style={{ fontFamily: 'Pretendard', fontWeight: "500" }}>
+        <button
+            onClick={onClick}
+            className="
+                relative
+                w-[360px]
+                text-left
+                cursor-pointer
+                group
+            "
+            style={{
+                fontFamily: "Pretendard",
+                fontWeight: "500",
+            }}
+        >
+            {/* 순위 */}
             <div
-                className="absolute -top-[18px] -left-[18px] w-[42px] h-[42px] rounded-full border-1 border-slate-800 z-10 flex items-center justify-center font-extrabold text-slate-900"
-                style={{ backgroundColor: RANK_COLORS[rank - 1] }}
+                className="
+                    absolute
+                    -top-[18px]
+                    -left-[14px]
+                    w-[42px]
+                    h-[42px]
+                    rounded-full
+                    border-[2px]
+                    border-white
+                    shadow-sm
+                    z-10
+                    flex items-center justify-center
+                    font-bold
+                    text-[#273A67]
+                "
+                style={{
+                    backgroundColor: RANK_COLORS[rank - 1],
+                }}
             >
                 {rank}
             </div>
-            <ThumbnailBox item={item} width={360} height={176} />
-            <p className="mt-[16px] text-[17px] text-slate-700 truncate">{item.title}</p>
-            <p className="text-[13px] text-slate-400">조회수 {item.views.toLocaleString()}회</p>
+
+            <div className="overflow-hidden rounded-[12px]">
+                <ThumbnailBox
+                    item={item}
+                    width={360}
+                    height={176}
+                />
+            </div>
+
+            <p
+                className="
+                    mt-[16px]
+                    text-[17px]
+                    text-[#273A67]
+                    truncate
+                    group-hover:text-[#657DB8]
+                    transition
+                "
+            >
+                {item.title}
+            </p>
+
+            <p className="mt-[4px] text-[13px] text-[#8C94A5]">
+                조회수 {item.views.toLocaleString()}회
+            </p>
         </button>
     );
 }
 
-// ---------------- 일반 그리드 카드 ----------------
-function GridCard({ item, onClick }: { item: VideoItem; onClick: () => void }) {
+// ---------------- 일반 카드 ----------------
+function GridCard({
+    item,
+    onClick,
+}: {
+    item: VideoItem;
+    onClick: () => void;
+}) {
     return (
-        <button onClick={onClick} className="w-[280px] text-left"
-            style={{ fontFamily: 'Pretendard', fontWeight: "400" }}>
-            <ThumbnailBox item={item} width={280} height={166} />
-            <p className="mt-[16px] text-[17px] text-slate-700 truncate">{item.title}</p>
-            <p className="text-[13px] text-slate-400">조회수 {item.views.toLocaleString()}회</p>
+        <button
+            onClick={onClick}
+            className="
+                w-[280px]
+                text-left
+                cursor-pointer
+                group
+            "
+            style={{
+                fontFamily: "Pretendard",
+                fontWeight: "400",
+            }}
+        >
+            <div className="overflow-hidden rounded-[12px]">
+                <ThumbnailBox
+                    item={item}
+                    width={280}
+                    height={166}
+                />
+            </div>
+
+            <p
+                className="
+                    mt-[14px]
+                    text-[17px]
+                    text-[#273A67]
+                    truncate
+                    group-hover:text-[#657DB8]
+                    transition
+                "
+            >
+                {item.title}
+            </p>
+
+            <p className="mt-[4px] text-[13px] text-[#8C94A5]">
+                조회수 {item.views.toLocaleString()}회
+            </p>
         </button>
     );
 }
 
-// ---------------- 유튜브 등록 팝업 ----------------
+// ---------------- 유튜브 등록 모달 ----------------
 function AddVideoModal({
     onClose,
     onSubmit,
@@ -152,29 +268,65 @@ function AddVideoModal({
 
     const handleSubmit = async () => {
         setError(null);
+
         const videoId = extractYoutubeId(value);
+
         if (!videoId) {
             setError("올바른 유튜브 링크를 입력해주세요.");
             return;
         }
+
         setLoading(true);
+
         try {
             await onSubmit(value.trim());
             onClose();
         } catch (e) {
-            setError(e instanceof Error ? e.message : "등록 중 오류가 발생했어요.");
+            setError(
+                e instanceof Error
+                    ? e.message
+                    : "등록 중 오류가 발생했어요."
+            );
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
-            <div className="w-[480px] bg-white rounded-2xl p-8 shadow-xl"
-                style={{ fontFamily: 'Pretendard', fontWeight: "500" }}>
-                <h3 className="text-[20px]">나만의 꿀잠템 공유하기</h3>
-                <p className="mt-[8px] text-[14px] text-slate-400">
-                    유튜브 영상 링크를 붙여넣으면 제목과 썸네일이 자동으로 등록돼요.
+        <div
+            className="
+                fixed inset-0 z-50
+                bg-[#273A67]/30
+                backdrop-blur-[2px]
+                flex items-center justify-center
+            "
+        >
+            <div
+                className="
+                    w-[480px]
+                    bg-white
+                    rounded-[18px]
+                    p-[32px]
+                    shadow-xl
+                "
+                style={{
+                    fontFamily: "Pretendard",
+                    fontWeight: "500",
+                }}
+            >
+                <h3
+                    className="
+                        text-[22px]
+                        font-bold
+                        text-[#273A67]
+                    "
+                >
+                    나만의 꿀잠템 공유하기
+                </h3>
+
+                <p className="mt-[9px] text-[14px] text-[#8C94A5]">
+                    유튜브 영상 링크를 붙여넣으면
+                    제목과 썸네일이 자동으로 등록돼요.
                 </p>
 
                 <input
@@ -182,22 +334,64 @@ function AddVideoModal({
                     value={value}
                     onChange={(e) => setValue(e.target.value)}
                     placeholder="https://www.youtube.com/watch?v=..."
-                    className="mt-[24px] w-full h-[48px] px-4 border border-slate-200 rounded-lg text-[15px] outline-none focus:border-[#A9BCF0]"
+                    className="
+                        mt-[24px]
+                        w-full
+                        h-[50px]
+                        px-[16px]
+                        border
+                        border-[#E1E5ED]
+                        rounded-[9px]
+                        text-[15px]
+                        text-[#273A67]
+                        outline-none
+                        transition
+                        focus:border-[#A9BCF0]
+                        focus:ring-2
+                        focus:ring-[#C9D6F5]
+                    "
                 />
 
-                {error && <p className="mt-[8px] text-[13px] text-red-500">{error}</p>}
+                {error && (
+                    <p className="mt-[8px] text-[13px] text-[#E47777]">
+                        {error}
+                    </p>
+                )}
 
-                <div className="mt-[28px] flex justify-end gap-[12px]">
+                <div className="mt-[28px] flex justify-end gap-[10px]">
                     <button
                         onClick={onClose}
-                        className="w-[120px] h-[44px] rounded-lg border border-slate-200 font-semibold text-slate-600 hover:bg-slate-50 transition"
+                        className="
+                            w-[120px]
+                            h-[44px]
+                            rounded-[9px]
+                            border
+                            border-[#E1E5ED]
+                            font-semibold
+                            text-[#697386]
+                            hover:bg-[#F7F8FB]
+                            transition
+                            cursor-pointer
+                        "
                     >
                         취소
                     </button>
+
                     <button
                         onClick={handleSubmit}
                         disabled={loading}
-                        className="w-[120px] h-[44px] rounded-lg bg-[#C9D6F5] font-semibold text-slate-800 hover:brightness-95 transition disabled:opacity-60"
+                        className="
+                            w-[120px]
+                            h-[44px]
+                            rounded-[9px]
+                            bg-[#C9D6F5]
+                            font-semibold
+                            text-[#273A67]
+                            hover:bg-[#B8C8EE]
+                            transition
+                            cursor-pointer
+                            disabled:opacity-60
+                        "
                     >
                         {loading ? "등록 중..." : "등록하기"}
                     </button>
@@ -209,19 +403,36 @@ function AddVideoModal({
 
 // ---------------- 메인 페이지 ----------------
 export default function SleepContentPage() {
-    const [videos, setVideos] = useState<VideoItem[]>(createDefaultVideos());
+    const [videos, setVideos] = useState<VideoItem[]>(
+        createDefaultVideos()
+    );
+
     const [isModalOpen, setModalOpen] = useState(false);
 
     const topThree = useMemo(
-        () => [...videos].sort((a, b) => b.views - a.views).slice(0, 3),
+        () =>
+            [...videos]
+                .sort((a, b) => b.views - a.views)
+                .slice(0, 3),
         [videos]
     );
 
     const handleAddVideo = async (url: string) => {
         const videoId = extractYoutubeId(url);
-        if (!videoId) throw new Error("올바른 유튜브 링크를 입력해주세요.");
+
+        if (!videoId) {
+            throw new Error(
+                "올바른 유튜브 링크를 입력해주세요."
+            );
+        }
 
         const info = await fetchYoutubeInfo(videoId);
+
+        await api.post("/contents", {
+            title: info.title,
+            thumbnail: info.thumbnail,
+            link: url,
+        });
 
         const newItem: VideoItem = {
             id: `${videoId}-${Date.now()}`,
@@ -232,65 +443,159 @@ export default function SleepContentPage() {
             views: 0,
         };
 
-        // 등록된 영상은 리스트 맨 앞에 추가 (그리드는 4열, 개수 제한 없음)
         setVideos((prev) => [newItem, ...prev]);
     };
 
     const handleCardClick = (id: string) => {
         setVideos((prev) =>
-            prev.map((v) => (v.id === id ? { ...v, views: v.views + 1 } : v))
+            prev.map((v) =>
+                v.id === id
+                    ? { ...v, views: v.views + 1 }
+                    : v
+            )
         );
-        const target = videos.find((v) => v.id === id);
+
+        const target = videos.find(
+            (v) => v.id === id
+        );
+
         if (target?.url) {
-            window.open(target.url, "_blank", "noopener,noreferrer");
+            window.open(
+                target.url,
+                "_blank",
+                "noopener,noreferrer"
+            );
         }
     };
 
     return (
-        <div className="w-full min-h-screen bg-white">
+        <div
+            className="w-full min-h-screen bg-white"
+            style={{
+                fontFamily: "Pretendard",
+            }}
+        >
             <Header target="sleep" />
 
             <main className="px-[130px] mt-[110px]">
-                {/* ===== 이달의 꿀잠템 (조회수 TOP 3) ===== */}
-                <h2 className="font-extrabold text-slate-900 text-[28px]"
-                    style={{ fontFamily: 'Pretendard', fontWeight: "500" }}>이달의 꿀잠템</h2>
 
-                <div className="mt-[44px] flex items-center">
-                    <div className="flex gap-[20px]">
+                {/* ===== 페이지 타이틀 ===== */}
+                {/* <div>
+                    <h1
+                        className="
+                            text-[32px]
+                            font-bold
+                            text-[#273A67]
+                        "
+                    >
+                        꿀잠 콘텐츠
+                    </h1>
+
+                    <p
+                        className="
+                            mt-[8px]
+                            text-[15px]
+                            text-[#8C94A5]
+                        "
+                    >
+                        편안한 수면을 위한 다양한 콘텐츠를 만나보세요.
+                    </p>
+                </div> */}
+
+                {/* ===== 이달의 꿀잠템 ===== */}
+                <section className="mt-[55px]">
+
+                    <div className="flex items-end justify-between">
+                        <div>
+                            <h2
+                                className="
+                                    text-[28px]
+                                    font-bold
+                                    text-[#273A67]
+                                "
+                            >
+                                이달의 꿀잠템
+                            </h2>
+
+                            <p className="mt-[7px] text-[14px] text-[#8C94A5]">
+                                가장 많은 사랑을 받은 콘텐츠예요.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="mt-[42px] flex gap-[20px]">
                         {topThree.map((item, i) => (
                             <RankedCard
                                 key={item.id}
                                 item={item}
                                 rank={i + 1}
-                                onClick={() => handleCardClick(item.id)}
+                                onClick={() =>
+                                    handleCardClick(item.id)
+                                }
+                            />
+                        ))}
+                    </div>
+                </section>
+
+                {/* ===== 구분선 ===== */}
+                <div className="mt-[48px] border-t border-[#E4E8F0]" />
+
+                {/* ===== 콘텐츠 공유 버튼 ===== */}
+                <div className="flex justify-end mt-[20px]">
+                    <button
+                        onClick={() => setModalOpen(true)}
+                        className="
+                            w-[170px]
+                            h-[48px]
+                            flex
+                            items-center
+                            justify-center
+                            rounded-[9px]
+                            bg-[#C9D6F5]
+                            font-semibold
+                            text-[14px]
+                            text-[#273A67]
+                            hover:bg-[#B8C8EE]
+                            transition
+                            cursor-pointer
+                        "
+                    >
+                        나만의 꿀잠템 공유하기
+                    </button>
+                </div>
+
+                {/* ===== 전체 콘텐츠 ===== */}
+                <section className="mt-[30px] pb-[120px]">
+
+                    <div
+                        className="
+                            grid
+                            grid-cols-4
+                            gap-x-[10px]
+                            gap-y-[44px]
+                        "
+                    >
+                        {videos.map((item) => (
+                            <GridCard
+                                key={item.id}
+                                item={item}
+                                onClick={() =>
+                                    handleCardClick(item.id)
+                                }
                             />
                         ))}
                     </div>
 
-
-                </div>
-
-                {/* 구분선 */}
-                <div className="mt-[30px] border-t-2 border-slate-800" />
-                <div
-                    onClick={() => setModalOpen(true)}
-                    className="w-[162px] h-[52px] mt-[20px] ml-[990px] flex items-center justify-center rounded-lg bg-[#C9D6F5] font-semibold tracking-tighter text-[14px] text-slate-800 hover:brightness-95 transition self-end"
-                    style={{ fontFamily: 'Pretendard', fontWeight: "500" }}
-                >
-                    나만의 꿀잠템 공유하기
-                </div>
-                {/* ===== 전체 컨텐츠 그리드 (4열, 무한 추가) ===== */}
-                <div className="mt-[24px] grid grid-cols-4 gap-x-[10px] gap-y-[40px] pb-[120px]">
-                    {videos.map((item) => (
-                        <GridCard key={item.id} item={item} onClick={() => handleCardClick(item.id)} />
-                    ))}
-                </div>
+                </section>
             </main>
 
             <Footer />
 
             {isModalOpen && (
-                <AddVideoModal onClose={() => setModalOpen(false)} onSubmit={handleAddVideo} />
+                <AddVideoModal
+                    onClose={() => setModalOpen(false)}
+                    onSubmit={handleAddVideo}
+                />
             )}
         </div>
     );

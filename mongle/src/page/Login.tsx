@@ -1,5 +1,4 @@
 import {
-    useEffect,
     useState,
 } from "react";
 
@@ -8,23 +7,14 @@ import {
 } from "react-router-dom";
 
 import api from "../api/api";
-import { Header } from "../component/Header";
 
 export default function Login() {
     const navigate = useNavigate();
 
     const [email, setEmail] = useState("");
     const [pw, setPw] = useState("");
-    const [error, setError] = useState("");
     const [emailFormErr, setEmailFormErr] = useState(false);
 
-    const [emailState, setEmailState] = useState<
-        "basic" | "incorrect" | "success"
-    >("basic");
-
-    const [pwCheckState, setPwCheckState] = useState<
-        "basic" | "incorrect" | "success"
-    >("basic");
 
     const [pwNumFail, setPwNumFail] = useState<
         "basic" | "incorrect" | "success"
@@ -43,7 +33,6 @@ export default function Login() {
     // }, [pw]);
 
     const handleLogin = async () => {
-        setError("");
 
         if (!validateEmail(email)) {
             setEmailFormErr(true);
@@ -66,11 +55,7 @@ export default function Login() {
             sessionStorage.setItem("isLoggedIn", "true");
             navigate("/");
         } catch (error) {
-            setError(
-                error instanceof Error
-                    ? error.message
-                    : "로그인에 실패했습니다. 이메일과 비밀번호를 확인해주세요.",
-            );
+
         }
     };
 
@@ -127,7 +112,6 @@ export default function Login() {
                                 value={email}
                                 onChange={(e) => {
                                     setEmail(e.target.value);
-                                    setEmailState("basic");
                                     setEmailFormErr(false);
                                 }}
                                 placeholder="you@example.com"
@@ -167,7 +151,6 @@ export default function Login() {
                             value={pw}
                             onChange={(e) => {
                                 setPw(e.target.value);
-                                setPwCheckState("basic");
                             }}
                             placeholder="••••••••"
                             className="

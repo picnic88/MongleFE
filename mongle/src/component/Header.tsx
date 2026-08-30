@@ -4,7 +4,6 @@ export function Header(props: { target: string }) {
     const [isHovered, setIsHovered] = useState(false);
     const [isHovered1, setIsHovered1] = useState(false);
     const [isHovered2, setIsHovered2] = useState(false);
-    const accessToken = localStorage.getItem("accessToken");
     const navigate = useNavigate();
     const [isLoggedIn, setIsLoggedIn] = useState(
         () => sessionStorage.getItem("isLoggedIn") === "true"

@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronLeft } from "lucide-react";
 import api from "../api/api";
-import { Header } from "../component/Header";
 
 export default function Signup() {
     const navigate = useNavigate();

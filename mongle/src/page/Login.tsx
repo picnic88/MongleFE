@@ -15,11 +15,6 @@ export default function Login() {
     const [pw, setPw] = useState("");
     const [emailFormErr, setEmailFormErr] = useState(false);
 
-
-    const [pwNumFail, setPwNumFail] = useState<
-        "basic" | "incorrect" | "success"
-    >("basic");
-
     const validateEmail = (value: string) => {
         return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
     };
@@ -171,11 +166,7 @@ export default function Login() {
                             "
                         />
 
-                        {pwNumFail === "incorrect" && (
-                            <p className="mt-[5px] text-[14px] font-medium text-[#E77B7B]">
-                                비밀번호는 8자리 이상 입력해주세요.
-                            </p>
-                        )}
+
                     </div>
 
                     {/* login button */}

@@ -1,32 +1,28 @@
-import {
-    useEffect,
-    useState,
-} from "react";
+import { useState } from "react";
 
 import {
     useNavigate,
 } from "react-router-dom";
 
 import api from "../api/api";
-import { Header } from "../component/Header";
 
 export default function Login() {
     const navigate = useNavigate();
 
     const [email, setEmail] = useState("");
     const [pw, setPw] = useState("");
-    const [error, setError] = useState("");
+    const [, setError] = useState("");
     const [emailFormErr, setEmailFormErr] = useState(false);
 
-    const [emailState, setEmailState] = useState<
+    const [, setEmailState] = useState<
         "basic" | "incorrect" | "success"
     >("basic");
 
-    const [pwCheckState, setPwCheckState] = useState<
+    const [, setPwCheckState] = useState<
         "basic" | "incorrect" | "success"
     >("basic");
 
-    const [pwNumFail, setPwNumFail] = useState<
+    const [pwNumFail] = useState<
         "basic" | "incorrect" | "success"
     >("basic");
 

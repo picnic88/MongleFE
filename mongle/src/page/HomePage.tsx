@@ -18,7 +18,6 @@ const DESIGN_HEIGHT = 1500;
 
 export default function HomePage() {
     const [averageSleepScore, setAverageSleepScore] = useState(0);
-    const [nickName, setNickName] = useState("");
     console.log("HomePage 실행");
     useEffect(() => {
 

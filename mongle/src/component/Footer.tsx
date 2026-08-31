@@ -1,14 +1,13 @@
 export function Footer() {
     return (
-        <>
-            <div className="fixed bottom-0 bg-white w-full h-[60px] pl-[130px] flex items-center border-t-[1.5px] border-[#EAEAED]">
+        <footer className="fixed inset-x-0 bottom-0 z-40 h-[60px] border-t-[1.5px] border-[#eaeaed] bg-white">
+            <div className="mx-auto flex h-full w-full max-w-[1840px] items-center px-4 sm:px-6 lg:px-[130px]">
                 <span
                     className="font-extrabold text-slate-900 text-[15px]"
                 >
                     Mongle
                 </span>
             </div>
-
-        </>
+        </footer>
     )
 }

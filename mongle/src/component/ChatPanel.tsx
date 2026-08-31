@@ -1,74 +1,19 @@
-import { Info, Minus, SendHorizontal } from 'lucide-react'
+import { Maximize2, Minus, SendHorizontal } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { ReportStatus } from '../types/report'
-
-type ChatMessage = {
-  id: string
-  role: 'ai' | 'user'
-  lines: string[]
-}
+import { createReportCoachReply } from '../lib/api'
+import {
+  createChatCacheKey,
+  readChatCache,
+  removeExpiredChatCaches,
+  writeChatCache,
+} from '../lib/chatCache'
+import type { ChatMessage, ReportStatus, SleepReport } from '../types/report'
 
 type ChatPanelProps = {
   reportStatus: ReportStatus
+  report: SleepReport | null
+  userId: string
 }
-
-const beforeMessages: ChatMessage[] = [
-  {
-    id: 'before-1',
-    role: 'ai',
-    lines: [
-      '안녕하세요! 이달의 수면 리포트를 생성하면',
-      '더 정확한 상담이 가능해요.',
-      '먼저 리포트를 생성해볼까요?',
-    ],
-  },
-  {
-    id: 'before-2',
-    role: 'ai',
-    lines: [
-      '리포트 생성 전에도 수면 습관이나',
-      '환경에 대해 질문할 수 있어요.',
-      '무엇이든 편하게 물어보세요!',
-    ],
-  },
-]
-
-const afterMessages: ChatMessage[] = [
-  {
-    id: 'after-1',
-    role: 'ai',
-    lines: ['안녕하세요! 저는 몽글 AI 수면 코치입니다.', '오늘의 수면 리포트를 바탕으로 도와드릴게요.'],
-  },
-  { id: 'after-2', role: 'user', lines: ['제 수면 점수는 어떻게 나오나요?'] },
-  {
-    id: 'after-3',
-    role: 'ai',
-    lines: ['오늘의 AI 수면 점수는 82점으로 양호 수준이에요.', '최근 7일 평균보다 3점 상승했어요!'],
-  },
-  { id: 'after-4', role: 'user', lines: ['코골이 시간이 많은 편인가요?'] },
-  {
-    id: 'after-5',
-    role: 'ai',
-    lines: ['오늘 평균 코골이 시간은 18분으로 보통 수준이에요.', '40분 이상인 날은 수면 점수가 낮아지는 경향이 있어요.'],
-  },
-  { id: 'after-6', role: 'user', lines: ['습도는 적정한가요?'] },
-  {
-    id: 'after-7',
-    role: 'ai',
-    lines: ['오늘 평균 습도는 53%로 적정 범위(40~60%)를', '잘 유지하고 있어요.'],
-  },
-  { id: 'after-8', role: 'user', lines: ['REM 비율을 높이려면 어떻게 해야 하나요?'] },
-  {
-    id: 'after-9',
-    role: 'ai',
-    lines: [
-      'REM 비율을 높이려면 아래를 실천해보세요.',
-      '• 취침 전 2시간 전 무거운 식사 피하기',
-      '• 규칙적인 운동과 일정한 취침 시간 유지',
-      '• 스트레스 관리하기',
-    ],
-  },
-]
 
 const beforeQuestions = [
   '리포트는 어떻게 생성되나요?',
@@ -78,17 +23,34 @@ const beforeQuestions = [
 ]
 
 const afterQuestions = [
-  '수면 점수는 어떻게 계산되나요?',
-  '온도와 습도는 어떻게 관리해야 하나요?',
+  '수면 점수는 어떻게 나왔나요?',
+  '온도와 습도는 적정한가요?',
   '코골이를 줄이는 방법이 있을까요?',
-  'REM 비율이 낮으면 어떤 영향이 있나요?',
+  '평균 수면 시간은 얼마인가요?',
 ]
 
-export function ChatPanel({ reportStatus }: ChatPanelProps) {
-  const initialMessages = reportStatus === 'before' ? beforeMessages : afterMessages
+export function ChatPanel({ reportStatus, report, userId }: ChatPanelProps) {
   const questions = reportStatus === 'before' ? beforeQuestions : afterQuestions
+  const cacheKey = useMemo(
+    () => createChatCacheKey(userId, reportStatus, report?.id),
+    [report?.id, reportStatus, userId],
+  )
+  const initialMessages = useMemo<ChatMessage[]>(() => [{
+    id: `${reportStatus}-welcome`,
+    role: 'ai',
+    content: reportStatus === 'before'
+      ? '안녕하세요! 수면 습관이나 환경에 대해 궁금한 점을 물어보세요. 리포트를 생성하면 저장된 기록을 바탕으로 더 구체적으로 답변할 수 있어요.'
+      : report
+        ? `안녕하세요! 최근 ${report.recordCount}일의 수면 기록을 바탕으로 도와드릴게요. 점수, 코골이, 온도와 습도에 대해 물어보세요.`
+        : '수면 리포트를 불러오는 중이에요. 잠시 후 궁금한 점을 물어보세요.',
+  }], [report, reportStatus])
   const [draft, setDraft] = useState('')
-  const [sentMessages, setSentMessages] = useState<ChatMessage[]>([])
+  const [sentMessages, setSentMessages] = useState<ChatMessage[]>(() => {
+    removeExpiredChatCaches()
+    return readChatCache(cacheKey)
+  })
+  const [isResponding, setIsResponding] = useState(false)
+  const [isMinimized, setIsMinimized] = useState(false)
   const messageListRef = useRef<HTMLDivElement>(null)
   const messageContentRef = useRef<HTMLDivElement>(null)
 
@@ -96,6 +58,11 @@ export function ChatPanel({ reportStatus }: ChatPanelProps) {
     () => [...initialMessages, ...sentMessages],
     [initialMessages, sentMessages],
   )
+  const hasStarted = sentMessages.some((message) => message.role === 'user')
+
+  useEffect(() => {
+    writeChatCache(cacheKey, sentMessages)
+  }, [cacheKey, sentMessages])
 
   const scrollToLatestMessage = useCallback(() => {
     const messageList = messageListRef.current
@@ -103,10 +70,11 @@ export function ChatPanel({ reportStatus }: ChatPanelProps) {
   }, [])
 
   useLayoutEffect(() => {
+    if (isMinimized) return
     scrollToLatestMessage()
     const nextFrame = window.requestAnimationFrame(scrollToLatestMessage)
     return () => window.cancelAnimationFrame(nextFrame)
-  }, [messages, scrollToLatestMessage])
+  }, [isMinimized, messages, scrollToLatestMessage])
 
   useEffect(() => {
     const messageList = messageListRef.current
@@ -116,18 +84,45 @@ export function ChatPanel({ reportStatus }: ChatPanelProps) {
     const resizeObserver = new ResizeObserver(scrollToLatestMessage)
     resizeObserver.observe(messageList)
     resizeObserver.observe(messageContent)
-
     return () => resizeObserver.disconnect()
   }, [scrollToLatestMessage])
 
-  const sendMessage = () => {
-    const message = draft.trim()
-    if (!message) return
+  const sendMessage = async (suggestedMessage?: string) => {
+    const message = (suggestedMessage ?? draft).trim()
+    if (!message || isResponding) return
+
+    const now = Date.now()
     setSentMessages((current) => [
       ...current,
-      { id: `sent-${Date.now()}`, role: 'user', lines: [message] },
+      { id: `user-${now}`, role: 'user', content: message },
     ])
     setDraft('')
+    setIsResponding(true)
+
+    await new Promise((resolve) => window.setTimeout(resolve, 220))
+    const reply = createReportCoachReply(message, report)
+    setSentMessages((current) => [
+      ...current,
+      { id: `ai-${now}`, role: 'ai', content: reply },
+    ])
+    setIsResponding(false)
+  }
+
+  if (isMinimized) {
+    return (
+      <section className="overflow-hidden rounded-[16px] border border-[#e3e8f0] bg-white shadow-[0_4px_14px_rgba(31,46,77,0.06)]">
+        <button
+          type="button"
+          onClick={() => setIsMinimized(false)}
+          aria-label="상담창 펼치기"
+          aria-expanded="false"
+          className="flex min-h-14 w-full items-center px-5 text-left transition hover:bg-[#f8faff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4578fa]"
+        >
+          <span className="text-[18px] font-bold">AI와 상담하기</span>
+          <Maximize2 aria-hidden="true" className="ml-auto size-5 text-[#616978]" strokeWidth={1.6} />
+        </button>
+      </section>
+    )
   }
 
   return (
@@ -135,14 +130,15 @@ export function ChatPanel({ reportStatus }: ChatPanelProps) {
       <header className="px-5 pt-3">
         <div className="flex items-center">
           <h2 className="text-[18px] font-bold sm:text-[19px]">AI와 상담하기</h2>
-          <div className="ml-auto flex items-center gap-2 text-[#616978]">
-            <button type="button" aria-label="상담 안내" className="flex size-7 items-center justify-center rounded-full hover:bg-[#f3f6fb]">
-              <Info aria-hidden="true" className="size-4" strokeWidth={1.5} />
-            </button>
-            <button type="button" aria-label="상담창 최소화" className="flex size-7 items-center justify-center rounded-full hover:bg-[#f3f6fb]">
-              <Minus aria-hidden="true" className="size-5" strokeWidth={1.5} />
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => setIsMinimized(true)}
+            aria-label="상담창 최소화"
+            aria-expanded="true"
+            className="ml-auto flex size-8 items-center justify-center rounded-full text-[#616978] transition hover:bg-[#f3f6fb] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4578fa]"
+          >
+            <Minus aria-hidden="true" className="size-5" strokeWidth={1.6} />
+          </button>
         </div>
 
         <div className="mt-2 flex items-center gap-3 border-b border-[#e3e8f0] pb-2">
@@ -156,7 +152,9 @@ export function ChatPanel({ reportStatus }: ChatPanelProps) {
           </div>
           <div>
             <h3 className="text-[14px] font-bold">AI 수면 코치</h3>
-            <p className="mt-0.5 text-[12px] text-[#616978]">수면에 대한 궁금한 점을 물어보세요.</p>
+            <p className="mt-0.5 text-[12px] text-[#616978]">
+              {report ? '내 수면 기록을 바탕으로 답변해요.' : '수면에 대한 궁금한 점을 물어보세요.'}
+            </p>
           </div>
         </div>
       </header>
@@ -171,11 +169,17 @@ export function ChatPanel({ reportStatus }: ChatPanelProps) {
           {messages.map((message) => (
             <ChatBubble key={message.id} message={message} reportStatus={reportStatus} />
           ))}
+          {isResponding && (
+            <div className="flex items-center gap-2 pl-11 text-[12px] text-[#8c94a3]" role="status">
+              <span className="size-1.5 animate-pulse rounded-full bg-[#8c94a3]" />
+              답변을 정리하고 있어요
+            </div>
+          )}
         </div>
       </div>
 
       <div className="border-t border-transparent px-5 pb-4 pt-2">
-        {sentMessages.length === 0 && (
+        {!hasStarted && (
           <div data-testid="recommended-questions">
             <h3 className="text-[14px] font-bold">추천 질문</h3>
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -183,8 +187,9 @@ export function ChatPanel({ reportStatus }: ChatPanelProps) {
                 <button
                   type="button"
                   key={question}
-                  onClick={() => setDraft(question)}
-                  className="min-h-9 rounded-full border border-[#bdd1ff] bg-white px-3 py-1.5 text-[11px] font-medium leading-4 text-[#4578fa] transition hover:bg-[#f4f7ff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4578fa]"
+                  onClick={() => void sendMessage(question)}
+                  disabled={isResponding}
+                  className="min-h-9 rounded-full border border-[#bdd1ff] bg-white px-3 py-1.5 text-[11px] font-medium leading-4 text-[#4578fa] transition hover:bg-[#f4f7ff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4578fa] disabled:opacity-60"
                 >
                   {question}
                 </button>
@@ -193,7 +198,7 @@ export function ChatPanel({ reportStatus }: ChatPanelProps) {
           </div>
         )}
 
-        <div className={`relative rounded-[10px] border border-[#e3e8f0] bg-white px-3 pb-2 pt-2 focus-within:border-[#8eaeff] ${sentMessages.length === 0 ? 'mt-3' : ''}`}>
+        <div className={`relative rounded-[10px] border border-[#e3e8f0] bg-white px-3 pb-2 pt-2 focus-within:border-[#8eaeff] ${!hasStarted ? 'mt-3' : ''}`}>
           <textarea
             value={draft}
             maxLength={500}
@@ -201,7 +206,7 @@ export function ChatPanel({ reportStatus }: ChatPanelProps) {
             onKeyDown={(event) => {
               if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault()
-                sendMessage()
+                void sendMessage()
               }
             }}
             placeholder="메시지를 입력하세요..."
@@ -211,8 +216,8 @@ export function ChatPanel({ reportStatus }: ChatPanelProps) {
           <span className="block text-[12px] text-[#8c94a3]">{draft.length}/500</span>
           <button
             type="button"
-            onClick={sendMessage}
-            disabled={!draft.trim()}
+            onClick={() => void sendMessage()}
+            disabled={!draft.trim() || isResponding}
             aria-label="메시지 보내기"
             className="absolute bottom-2 right-2 flex size-10 items-center justify-center rounded-lg bg-[#4578fa] text-white transition hover:bg-[#3769e8] disabled:bg-[#ededed] disabled:text-[#1f242e]"
           >
@@ -226,7 +231,6 @@ export function ChatPanel({ reportStatus }: ChatPanelProps) {
 
 function ChatBubble({ message, reportStatus }: { message: ChatMessage; reportStatus: ReportStatus }) {
   const isAi = message.role === 'ai'
-
   return (
     <div className={`flex items-start gap-3 ${isAi ? '' : 'justify-end'}`}>
       {isAi && (
@@ -239,17 +243,15 @@ function ChatBubble({ message, reportStatus }: { message: ChatMessage; reportSta
           <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-[#2e8f78]">AI</span>
         </div>
       )}
-      <div
-        className={`max-w-[82%] rounded-[12px] border px-3 py-2.5 text-[12px] leading-[1.55] ${
+      <p
+        className={`max-w-[82%] whitespace-pre-wrap rounded-[12px] border px-3 py-2.5 text-[12px] leading-[1.55] ${
           isAi
             ? 'border-[#e3e8f0] bg-[#fbfcfe] text-[#1f242e]'
             : 'border-[#bdd1ff] bg-[#e7f0ff] text-[#1f242e]'
         }`}
       >
-        {message.lines.map((line) => (
-          <p key={line} className="whitespace-pre-wrap">{line}</p>
-        ))}
-      </div>
+        {message.content}
+      </p>
     </div>
   )
 }

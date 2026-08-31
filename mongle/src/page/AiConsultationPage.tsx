@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Footer } from '../component/Footer'
 import { Header } from '../component/Header'
 import { AfterReport } from '../component/AfterReport'
 import { BeforeReport } from '../component/BeforeReport'
 import { ChatPanel } from '../component/ChatPanel'
-import type { ReportStatus } from '../types/report'
+import { mongleApi, resolveUserId } from '../lib/api'
+import type { ReportStatus, SleepReport } from '../types/report'
 
 function getReportStatus(): ReportStatus {
   return new URLSearchParams(window.location.search).get('report') === 'after'
@@ -14,6 +15,11 @@ function getReportStatus(): ReportStatus {
 
 export default function AiConsultationPage() {
   const [reportStatus, setReportStatus] = useState<ReportStatus>(getReportStatus)
+  const [report, setReport] = useState<SleepReport | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const userId = useMemo(resolveUserId, [])
 
   useEffect(() => {
     const syncFromUrl = () => setReportStatus(getReportStatus())
@@ -21,12 +27,42 @@ export default function AiConsultationPage() {
     return () => window.removeEventListener('popstate', syncFromUrl)
   }, [])
 
+  const loadReport = useCallback(async () => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      setReport(await mongleApi.getLatestReport(userId))
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : '수면 리포트를 불러오지 못했습니다.')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [userId])
+
+  useEffect(() => {
+    if (reportStatus === 'after' && !report) void loadReport()
+  }, [loadReport, report, reportStatus])
+
   const changeReportStatus = (status: ReportStatus) => {
     const url = new URL(window.location.href)
     url.searchParams.set('report', status)
     window.history.pushState({}, '', url)
     setReportStatus(status)
     window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const generateReport = async () => {
+    setIsGenerating(true)
+    setError(null)
+    try {
+      const generatedReport = await mongleApi.generateReport(userId)
+      setReport(generatedReport)
+      changeReportStatus('after')
+    } catch (generateError) {
+      setError(generateError instanceof Error ? generateError.message : '수면 리포트를 생성하지 못했습니다.')
+    } finally {
+      setIsGenerating(false)
+    }
   }
 
   return (
@@ -45,18 +81,44 @@ export default function AiConsultationPage() {
           </div>
 
           {reportStatus === 'before' ? (
-            <BeforeReport onGenerate={() => changeReportStatus('after')} />
+            <BeforeReport onGenerate={generateReport} isGenerating={isGenerating} error={error} />
+          ) : isLoading ? (
+            <ReportState message="서버의 수면 기록을 불러오고 있어요..." />
+          ) : report ? (
+            <AfterReport report={report} />
           ) : (
-            <AfterReport />
+            <ReportState message={error ?? '표시할 수면 기록이 없습니다.'} onRetry={loadReport} />
           )}
         </section>
 
         <aside className="min-w-0 lg:sticky lg:top-[91px] lg:h-[calc(100vh-167px)] lg:min-h-[440px] lg:max-h-[760px]">
-          <ChatPanel key={reportStatus} reportStatus={reportStatus} />
+          <ChatPanel
+            key={`${reportStatus}-${report?.id ?? 'empty'}`}
+            reportStatus={reportStatus}
+            report={reportStatus === 'after' ? report : null}
+            userId={userId}
+          />
         </aside>
       </main>
 
       <Footer />
     </div>
+  )
+}
+
+function ReportState({ message, onRetry }: { message: string; onRetry?: () => Promise<void> }) {
+  return (
+    <section className="flex min-h-[360px] flex-col items-center justify-center rounded-[18px] border border-[#e3e8f0] bg-white px-6 text-center shadow-[0_4px_14px_rgba(31,46,77,0.06)]">
+      <p className="text-[15px] text-[#616978]">{message}</p>
+      {onRetry && (
+        <button
+          type="button"
+          onClick={() => void onRetry()}
+          className="mt-4 min-h-10 rounded-[10px] bg-[#4578fa] px-5 text-[14px] font-bold text-white transition hover:bg-[#3769e8]"
+        >
+          다시 불러오기
+        </button>
+      )}
+    </section>
   )
 }

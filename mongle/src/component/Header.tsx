@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import api from "../api/api";
 export function Header(props: { target: string }) {
     const [isHovered, setIsHovered] = useState(false);
     const [isHovered1, setIsHovered1] = useState(false);
@@ -17,6 +18,17 @@ export function Header(props: { target: string }) {
         }
 
         navigate("/login");
+    };
+    const handleLogout = async () => {
+        try {
+            await api.post("/logout");
+        } catch (error) {
+            console.error("로그아웃 실패:", error);
+        } finally {
+            sessionStorage.removeItem("isLoggedIn");
+            sessionStorage.removeItem("user_id");
+            navigate("/login");
+        }
     };
     return (
         <>
@@ -63,9 +75,13 @@ export function Header(props: { target: string }) {
                     </button>
                 </div>
                 <div className="ml-auto mr-[96px]">
-                    <button type="button" onClick={handleAuthClick}>
-                        {isLoggedIn ? "로그아웃" : "로그인"}
-                    </button>
+                    {/* <button type="button" onClick={handleAuthClick}> */}
+                    {isLoggedIn ? <button type="button" onClick={handleLogout}>
+                        로그아웃
+                    </button> : <button type="button" onClick={handleAuthClick}>
+                        로그인
+                    </button>}
+                    {/* </button> */}
                 </div>
             </div>
         </>

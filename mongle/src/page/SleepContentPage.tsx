@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Header } from "../component/Header";
 import { Footer } from "../component/Footer";
 import api from "../api/api";
@@ -408,7 +408,7 @@ export default function SleepContentPage() {
     );
 
     const [isModalOpen, setModalOpen] = useState(false);
-
+    const [loading, setLoading] = useState(true);
     const topThree = useMemo(
         () =>
             [...videos]
@@ -427,12 +427,17 @@ export default function SleepContentPage() {
         }
 
         const info = await fetchYoutubeInfo(videoId);
-
-        await api.post("/contents", {
-            title: info.title,
-            thumbnail: info.thumbnail,
-            link: url,
-        });
+        try {
+            await api.post("/contents", {
+                title: info.title,
+                thumbnail: info.thumbnail,
+                link: url,
+            });
+            console.log("등록 완료");
+        } catch (error) {
+            console.log("등록 실패");
+            console.log(error);
+        }
 
         const newItem: VideoItem = {
             id: `${videoId}-${Date.now()}`,
@@ -467,8 +472,35 @@ export default function SleepContentPage() {
             );
         }
     };
+    // ---------------- 등록된 영상 불러오기 ----------------
+    useEffect(() => {
+        const fetchVideos = async () => {
+            try {
+                const res = await api.get("/contents");
 
+                // 서버 응답을 VideoItem 형태로 매핑
+                const fetched: VideoItem[] = res.data.map((c: any) => ({
+                    id: String(c.id),
+                    videoId: extractYoutubeId(c.link) ?? null,
+                    url: c.link,
+                    title: c.title,
+                    thumbnail: c.thumbnail,
+                    views: c.views ?? 0,
+                }));
+
+                setVideos(fetched.reverse());
+            } catch (error) {
+                console.log("목록 불러오기 실패");
+                console.log(error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchVideos();
+    }, []);
     return (
+
         <div
             className="w-full min-h-screen bg-white"
             style={{
@@ -478,29 +510,6 @@ export default function SleepContentPage() {
             <Header target="sleep" />
 
             <main className="px-[130px] mt-[110px]">
-
-                {/* ===== 페이지 타이틀 ===== */}
-                {/* <div>
-                    <h1
-                        className="
-                            text-[32px]
-                            font-bold
-                            text-[#273A67]
-                        "
-                    >
-                        꿀잠 콘텐츠
-                    </h1>
-
-                    <p
-                        className="
-                            mt-[8px]
-                            text-[15px]
-                            text-[#8C94A5]
-                        "
-                    >
-                        편안한 수면을 위한 다양한 콘텐츠를 만나보세요.
-                    </p>
-                </div> */}
 
                 {/* ===== 이달의 꿀잠템 ===== */}
                 <section className="mt-[55px]">

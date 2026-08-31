@@ -14,29 +14,64 @@ const PAST_REPORTS = [
 const DESIGN_WIDTH = 1920;
 const DESIGN_HEIGHT = 1500;
 
+
+
 export default function HomePage() {
-    const userName = "임세미";
-
-    const [sleepScore, setSleepScore] = useState<number | null>(null);
-
+    const [averageSleepScore, setAverageSleepScore] = useState(0);
+    const [nickName, setNickName] = useState("");
+    console.log("HomePage 실행");
     useEffect(() => {
-        const getSleepScore = async () => {
+
+        const getSleepInfo = async () => {
+            console.log("useEffect 실행")
             try {
-                const response = await api.get("/sleepInfo", {
+                console.log("getSleepInfo 실행")
+                const userId = sessionStorage.getItem("user_id");
+
+                const response = await api.get("/sleepinfo", {
                     params: {
-                        id: 1,
-                    },
+                        id: userId,
+                    }
                 });
 
-                console.log("수면 기록: ", response.data);
-                setSleepScore(response.data.sleep_score);
+                const sleepInfos = response.data;
+                const today = new Date();
+                const MonthDaysAgo = new Date();
+                MonthDaysAgo.setDate(today.getDate() - 30);
+                // 최근 30일 수면 기록만 필터링
+                const recentScores = sleepInfos
+                    .filter((item: any) => {
+                        const date = new Date(item.day);
+
+                        return date >= MonthDaysAgo && date <= today;
+                    })
+                    .map((item: any) => item.sleep_score)
+                    .filter((score: any) => typeof score === "number");
+
+
+                if (recentScores.length === 0) {
+                    setAverageSleepScore(0);
+                    return;
+                }
+
+                const average =
+                    recentScores.reduce(
+                        (sum: number, score: number) => sum + score,
+                        0
+                    ) / recentScores.length;
+
+                setAverageSleepScore(Math.round(average));
+
             } catch (error) {
-                console.log("수면 점수를 불러오지 못함", error);
+                console.error("수면 점수를 불러오지 못함", error);
             }
         };
 
-        getSleepScore();
+        getSleepInfo();
     }, []);
+
+    const userName = "임세미";
+
 
     const wrapperRef = useRef<HTMLDivElement>(null);
     const [scale, setScale] = useState(1);
@@ -227,8 +262,8 @@ export default function HomePage() {
                                         text-[#526A9D]
                                     "
                                 >
-                                    {sleepScore !== null
-                                        ? `${sleepScore} 점`
+                                    {averageSleepScore !== 0
+                                        ? `${averageSleepScore} 점`
                                         : "로딩 중..."}
                                 </span>
                             </div>

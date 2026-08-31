@@ -19,13 +19,6 @@ export default function Login() {
         return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
     };
 
-    // useEffect(() => {
-    //     if (pw.length > 0 && pw.length < 8) {
-    //         setPwNumFail("incorrect");
-    //     } else {
-    //         setPwNumFail("success");
-    //     }
-    // }, [pw]);
 
     const handleLogin = async () => {
 
@@ -42,15 +35,19 @@ export default function Login() {
         // }
 
         try {
-            await api.post("/login", {
+            const response = await api.post("/login", {
+                name: "",
                 email: email,
                 pwd: pw,
             });
-
+            console.log(response.data)
             sessionStorage.setItem("isLoggedIn", "true");
+            sessionStorage.setItem("user_id", response.data.user_id);
+            console.log(response.data.user_id);
+            console.log(sessionStorage.getItem("user_id"));
             navigate("/");
         } catch (error) {
-
+            console.error("로그인 실패:", error);
         }
     };
 

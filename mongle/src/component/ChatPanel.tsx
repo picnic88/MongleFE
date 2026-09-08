@@ -41,7 +41,7 @@ export function ChatPanel({ reportStatus, report, userId }: ChatPanelProps) {
     content: reportStatus === 'before'
       ? '안녕하세요! 수면 습관이나 환경에 대해 궁금한 점을 물어보세요. 리포트를 생성하면 저장된 기록을 바탕으로 더 구체적으로 답변할 수 있어요.'
       : report
-        ? `안녕하세요! 최근 ${report.recordCount}일의 수면 기록을 바탕으로 도와드릴게요. 점수, 코골이, 온도와 습도에 대해 물어보세요.`
+        ? '안녕하세요! 수면 리포트를 바탕으로 도와드릴게요. 점수, 코골이, 온도와 습도에 대해 물어보세요.'
         : '수면 리포트를 불러오는 중이에요. 잠시 후 궁금한 점을 물어보세요.',
   }], [report, reportStatus])
   const [draft, setDraft] = useState('')
@@ -153,7 +153,7 @@ export function ChatPanel({ reportStatus, report, userId }: ChatPanelProps) {
           <div>
             <h3 className="text-[14px] font-bold">AI 수면 코치</h3>
             <p className="mt-0.5 text-[12px] text-[#616978]">
-              {report ? '내 수면 기록을 바탕으로 답변해요.' : '수면에 대한 궁금한 점을 물어보세요.'}
+              {report ? '수면 리포트 기반 자동 안내' : '수면 기록을 확인하면 더 자세히 안내해요.'}
             </p>
           </div>
         </div>

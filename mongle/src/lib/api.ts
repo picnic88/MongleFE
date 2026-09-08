@@ -1,8 +1,8 @@
-import type { SleepReport, SleepTrendPoint } from '../types/report'
+import type { AiSleepReportData, SleepReport, SleepTrendPoint } from '../types/report'
 
 type JsonRecord = Record<string, unknown>
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '/api').replace(/\/$/, '')
+const API_BASE_URL = (import.meta.env?.VITE_API_BASE_URL ?? '/api').replace(/\/$/, '')
 
 export class ApiError extends Error {
   status: number
@@ -23,9 +23,12 @@ function asRecord(value: unknown): JsonRecord | null {
 function unwrap(value: unknown): unknown {
   let current = value
   for (let depth = 0; depth < 4; depth += 1) {
+    if (typeof current === 'string') {
+      try { current = JSON.parse(current) } catch { break }
+    }
     const record = asRecord(current)
     if (!record) break
-    const next = record.data ?? record.report ?? record.result
+    const next = record.data ?? record.report ?? record.report_data ?? record.result
     if (next === undefined) break
     current = next
   }
@@ -42,9 +45,8 @@ function pick(record: JsonRecord | null, keys: string[]): unknown {
 
 function toNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === '') return null
-  const parsed = typeof value === 'number'
-    ? value
-    : Number(String(value).replace(/[^0-9.-]/g, ''))
+  if (typeof value !== 'number' && typeof value !== 'string') return null
+  const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : null
 }
 
@@ -74,6 +76,7 @@ function average(values: Array<number | null>, digits = 1) {
 function getToken() {
   if (typeof window === 'undefined') return null
   return localStorage.getItem('token')
+    ?? localStorage.getItem('accessToken')
     ?? localStorage.getItem('authToken')
     ?? localStorage.getItem('access_token')
 }
@@ -81,6 +84,7 @@ function getToken() {
 async function request(path: string, init?: RequestInit) {
   const token = getToken()
   const response = await fetch(`${API_BASE_URL}${path}`, {
+    signal: AbortSignal.timeout(20000),
     ...init,
     headers: {
       Accept: 'application/json',
@@ -116,6 +120,7 @@ function normalizeTrendPoint(value: unknown, index: number): SleepTrendPoint {
   return {
     date: String(pick(record, ['date', 'day', 'created_at', 'createdAt']) ?? index + 1),
     score: toNumber(pick(record, ['score', 'sleep_score', 'sleepScore'])),
+    satisfaction: toNumber(pick(record, ['sleep_satisfaction', 'satisfaction'])),
     remPercentage: toNumber(pick(record, ['rem_percentage', 'rem_percent', 'rem', 'remPercentage'])),
     snoringCount: toNumber(pick(record, ['snoring_count', 'snore_count', 'snoring', 'snoringCount'])),
     temperature: toNumber(pick(record, ['temperature', 'temp_avg', 'temp', 'temperature_avg'])),
@@ -131,32 +136,49 @@ function hasReportContent(report: SleepReport) {
 }
 
 export function normalizeReport(value: unknown): SleepReport {
+  const envelope = asRecord(value)
   const root = asRecord(unwrap(value))
   if (!root) throw new Error('수면 리포트 응답 형식을 확인할 수 없습니다.')
 
-  const metrics = asRecord(pick(root, ['metrics', 'averages', 'summary_metrics'])) ?? root
+  const metrics = asRecord(pick(root, ['key_metrics', 'metrics', 'averages', 'summary_metrics'])) ?? root
+  const summary = asRecord(root.ai_summary)
+  const patternSource = root.pattern_analysis
+  const abnormalSource = root.abnormal_patterns
+  const metadata = { ...envelope, ...root }
   const trendSource = pick(root, ['trends', 'trend', 'daily_data', 'records', 'sleep_records'])
   const trends = Array.isArray(trendSource) ? trendSource.map(normalizeTrendPoint) : []
   const report: SleepReport = {
-    id: String(pick(root, ['report_id', 'reportId', 'id']) ?? '') || undefined,
+    id: String(pick(metadata, ['report_id', 'reportId', 'id']) ?? '') || undefined,
     source: 'server',
     recordCount: toNumber(pick(root, ['record_count', 'recordCount', 'count'])) ?? trends.length,
     metrics: {
-      score: toNumber(pick(metrics, ['score', 'sleep_score', 'ai_sleep_score'])),
+      score: toNumber(pick(metrics, ['score', 'sleep_score', 'ai_sleep_score']) ?? summary?.sleep_score),
       satisfaction: toNumber(pick(metrics, ['satisfaction', 'sleep_satisfaction', 'satisfaction_avg'])),
-      remPercentage: toNumber(pick(metrics, ['rem_percentage', 'rem_percent', 'rem', 'rem_avg'])),
+      remPercentage: toNumber(pick(metrics, ['average_rem', 'rem_percentage', 'rem_percent', 'rem', 'rem_avg'])),
       snoringCount: toNumber(pick(metrics, ['snoring_count', 'snore_count', 'snoring', 'snoring_avg'])),
-      temperature: toNumber(pick(metrics, ['temperature', 'temp_avg', 'temperature_avg'])),
-      humidity: toNumber(pick(metrics, ['humidity', 'hum_avg', 'humidity_avg'])),
+      temperature: toNumber(pick(metrics, ['average_temperature', 'temperature', 'temp_avg', 'temperature_avg'])),
+      humidity: toNumber(pick(metrics, ['average_humidity', 'humidity', 'hum_avg', 'humidity_avg'])),
       durationMinutes: toNumber(pick(metrics, ['duration', 'duration_minutes', 'sleep_duration'])),
     },
-    summary: toStringList(pick(root, ['summary', 'analysis', 'overall_analysis', 'ai_summary'])),
-    patterns: toStringList(pick(root, ['patterns', 'pattern_analysis', 'ai_patterns'])),
-    suggestions: toStringList(pick(root, ['suggestions', 'recommendations', 'improvements', 'advice'])),
+    summary: summary ? toStringList(summary.text) : toStringList(pick(root, ['summary', 'analysis', 'overall_analysis', 'ai_summary'])),
+    patterns: Array.isArray(patternSource)
+      ? patternSource.map((item) => {
+        const pattern = asRecord(item)
+        return pattern ? [pattern.condition, pattern.result, pattern.description].filter((part) => typeof part === 'string' && part).join(' · ') : String(item)
+      })
+      : toStringList(pick(root, ['patterns', 'ai_patterns'])),
+    abnormalPatterns: Array.isArray(abnormalSource) ? abnormalSource.flatMap((item) => {
+      const abnormal = asRecord(item)
+      return abnormal && typeof abnormal.date === 'string' && typeof abnormal.observation === 'string' && typeof abnormal.opinion === 'string'
+        ? [{ date: abnormal.date, observation: abnormal.observation, opinion: abnormal.opinion }]
+        : []
+    }) : [],
+    serverSnoringAverage: toNumber(metrics.average_snoring),
+    suggestions: toStringList(pick(root, ['improvement_suggestions', 'suggestions', 'recommendations', 'improvements', 'advice'])),
     trends,
     periodStart: String(pick(root, ['start_date', 'period_start', 'periodStart']) ?? '') || undefined,
     periodEnd: String(pick(root, ['end_date', 'period_end', 'periodEnd']) ?? '') || undefined,
-    createdAt: String(pick(root, ['created_at', 'createdAt', 'generated_at']) ?? '') || undefined,
+    createdAt: String(pick(metadata, ['created_at', 'createdAt', 'generated_at']) ?? '') || undefined,
   }
 
   if (!hasReportContent(report)) throw new Error('수면 리포트 응답에 표시할 데이터가 없습니다.')
@@ -276,8 +298,8 @@ export function buildReportFromSleepRecords(value: unknown, userId: string): Sle
     recordCount: trends.length,
     metrics: {
       score,
-      satisfaction: null,
-      remPercentage: null,
+      satisfaction: average(trends.map((item) => item.satisfaction ?? null)),
+      remPercentage: average(trends.map((item) => item.remPercentage)),
       snoringCount,
       temperature,
       humidity,
@@ -308,9 +330,12 @@ export function createReportCoachReply(message: string, report: SleepReport | nu
 
   const { metrics } = report
   if (question.includes('점수')) {
-    return `최근 ${report.recordCount}일의 평균 수면 점수는 ${formatMetric(metrics.score, '점')}이며, ${scoreLabel(metrics.score)}`
+    return `리포트의 수면 점수는 ${formatMetric(metrics.score, '점')}입니다.`
   }
   if (question.includes('코골')) {
+    if (metrics.snoringCount === null && report.serverSnoringAverage != null) {
+      return `리포트의 평균 코골이 값은 ${report.serverSnoringAverage}입니다. 단위가 제공되지 않아 횟수나 시간으로 해석할 수는 없어요.`
+    }
     const advice = metrics.snoringCount !== null && metrics.snoringCount >= 10
       ? '반복되는 코골이는 수면의 질을 떨어뜨릴 수 있으니 옆으로 눕는 자세를 시도하고, 지속되면 전문 상담을 권장해요.'
       : '현재 기록만으로 심한 수준이라고 단정하기는 어렵지만 날짜별 변화를 함께 확인하는 것이 좋아요.'
@@ -320,10 +345,14 @@ export function createReportCoachReply(message: string, report: SleepReport | nu
     return `평균 온도는 ${formatMetric(metrics.temperature, '℃')}, 평균 습도는 ${formatMetric(metrics.humidity, '%')}예요. 일반적으로 수면 환경은 온도 18~22℃, 습도 40~60%를 권장해요.`
   }
   if (question.includes('rem') || question.includes('렘')) {
-    return '현재 백엔드 수면 기록에는 REM 수면 단계 데이터가 없어 비율을 계산할 수 없어요. 웨어러블이나 수면 단계 측정값이 API에 추가되면 리포트와 상담에 바로 반영할 수 있어요.'
+    return metrics.remPercentage === null
+      ? '현재 리포트에는 REM 측정값이 없습니다.'
+      : `리포트에 기록된 평균 REM 값은 ${metrics.remPercentage}입니다.`
   }
   if (question.includes('만족')) {
-    return '현재 백엔드에는 수면 만족도 값이 저장되지 않아 객관적인 점수만 보여드리고 있어요. 만족도 필드가 추가되면 수면 점수와 함께 비교할 수 있어요.'
+    return metrics.satisfaction === null
+      ? '현재 리포트에는 수면 만족도 측정값이 없습니다.'
+      : `리포트에 기록된 수면 만족도는 ${metrics.satisfaction}입니다.`
   }
   if (question.includes('시간') || question.includes('얼마나')) {
     if (metrics.durationMinutes === null) return '수면 시간 기록이 충분하지 않아요.'
@@ -332,7 +361,7 @@ export function createReportCoachReply(message: string, report: SleepReport | nu
   if (question.includes('개선') || question.includes('방법') || question.includes('추천')) {
     return report.suggestions.slice(0, 3).join(' ')
   }
-  return `${report.summary[0]} 궁금한 지표를 점수, 코골이, 온도, 습도처럼 구체적으로 물어보면 기록을 기준으로 자세히 알려드릴게요.`
+  return `${report.summary[0] ?? '수면 리포트를 확인했어요.'} 궁금한 지표를 점수, 코골이, 온도, 습도처럼 구체적으로 물어보면 기록을 기준으로 자세히 알려드릴게요.`
 }
 
 export function resolveUserId() {
@@ -354,7 +383,32 @@ export function resolveUserId() {
     }
   }
 
-  return import.meta.env.VITE_MONGLE_USER_ID ?? '1'
+  return import.meta.env?.VITE_MONGLE_USER_ID ?? '1'
+}
+
+export function toReportPayload(report: SleepReport): AiSleepReportData {
+  const { metrics } = report
+  const required = (value: number | null | undefined, label: string, integer = false) => {
+    if (value == null || !Number.isFinite(value) || (integer && !Number.isInteger(value))) {
+      throw new Error(`${label} 값이 없거나 저장 규격과 맞지 않아 리포트를 저장할 수 없습니다.`)
+    }
+    return value
+  }
+  const score = required(metrics.score, '수면 점수', true)
+  return {
+    ai_summary: { text: report.summary.join('\n'), sleep_score: score, evaluation: '수면 기록 집계' },
+    key_metrics: {
+      sleep_score: score,
+      sleep_satisfaction: required(metrics.satisfaction, '수면 만족도', true),
+      average_rem: required(metrics.remPercentage, 'REM'),
+      average_snoring: required(report.serverSnoringAverage ?? metrics.snoringCount, '코골이'),
+      average_temperature: required(metrics.temperature, '온도'),
+      average_humidity: required(metrics.humidity, '습도'),
+    },
+    pattern_analysis: report.patterns.map((description) => ({ condition: '', result: '', description })),
+    abnormal_patterns: report.abnormalPatterns ?? [],
+    improvement_suggestions: report.suggestions,
+  }
 }
 
 async function getSleepReportFallback(userId: string) {
@@ -372,33 +426,45 @@ export const mongleApi = {
   async getLatestReport(userId: string) {
     try {
       const response = await request(`/report/latest/${encodeURIComponent(userId)}`)
+      if (unwrap(response) == null) {
+        const preview = await getSleepReportFallback(userId)
+        return { ...preview, notice: '저장된 리포트가 없어 수면 기록 미리보기를 표시합니다.' }
+      }
+      return normalizeReport(response)
+    } catch (error) {
+      if (error instanceof ApiError && [401, 403].includes(error.status)) throw error
+      const preview = await getSleepReportFallback(userId)
+      return { ...preview, notice: '저장된 리포트를 불러오지 못해 수면 기록 미리보기를 표시합니다.' }
+    }
+  },
+
+  async saveReport(userId: string, report: SleepReport) {
+    const payload = toReportPayload(report)
+    const response = await request(`/report?${new URLSearchParams({ user_id: userId })}`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+    // Some deployments return only the new identifier after saving.
+    try {
       return normalizeReport(response)
     } catch {
-      return getSleepReportFallback(userId)
+      const metadata = asRecord(response)
+      const id = pick(metadata, ['report_id', 'id'])
+      const path = id == null
+        ? `/report/latest/${encodeURIComponent(userId)}`
+        : `/report/${encodeURIComponent(String(id))}`
+      return normalizeReport(await request(path))
     }
   },
 
   async generateReport(userId: string) {
     const records = await request(`/sleepinfo?id=${encodeURIComponent(userId)}`)
     const fallback = buildReportFromSleepRecords(records, userId)
-    const startDate = `${fallback.periodStart}T00:00:00`
-    const endDate = `${fallback.periodEnd}T23:59:59`
-    const query = new URLSearchParams({
-      id: userId,
-      start_date: startDate,
-      end_date: endDate,
-    })
-
     try {
-      const response = await request(`/report?${query.toString()}`, { method: 'POST' })
-      try {
-        return normalizeReport(response)
-      } catch {
-        const latest = await request(`/report/latest/${encodeURIComponent(userId)}`)
-        return normalizeReport(latest)
-      }
+      toReportPayload(fallback)
     } catch {
-      return fallback
+      return { ...fallback, notice: '수면 기록 미리보기입니다. REM·만족도 등 필수 지표가 부족하거나 저장 규격에 맞지 않아 서버에 저장하지 않았습니다.' }
     }
+    return mongleApi.saveReport(userId, fallback)
   },
 }

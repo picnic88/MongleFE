@@ -8,9 +8,9 @@ import { mongleApi, resolveUserId } from '../lib/api'
 import type { ReportStatus, SleepReport } from '../types/report'
 
 function getReportStatus(): ReportStatus {
-  return new URLSearchParams(window.location.search).get('report') === 'after'
-    ? 'after'
-    : 'before'
+  return new URLSearchParams(window.location.search).get('report') === 'before'
+    ? 'before'
+    : 'after'
 }
 
 export default function AiConsultationPage() {
@@ -73,7 +73,7 @@ export default function AiConsultationPage() {
         <section className="min-w-0">
           <div className="mb-5 pt-1">
             <h1 className="text-[24px] font-bold leading-[1.4] sm:text-[26px]">
-              안녕하세요 서정환 님!
+              나의 수면 리포트
             </h1>
             <p className="mt-1 text-[14px] leading-6 text-[#616978] sm:text-[16px]">
               AI 수면 리포트와 상담을 통해 나에게 맞는 수면 환경을 알아보세요.
@@ -85,7 +85,10 @@ export default function AiConsultationPage() {
           ) : isLoading ? (
             <ReportState message="서버의 수면 기록을 불러오고 있어요..." />
           ) : report ? (
-            <AfterReport report={report} />
+            <>
+              {error && <p role="alert" className="mb-3 text-[13px] text-[#d04444]">{error}</p>}
+              <AfterReport report={report} onGenerate={generateReport} isGenerating={isGenerating} />
+            </>
           ) : (
             <ReportState message={error ?? '표시할 수면 기록이 없습니다.'} onRetry={loadReport} />
           )}

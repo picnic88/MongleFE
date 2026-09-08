@@ -8,7 +8,7 @@ type HeaderProps = {
 
 const menuItems = [
   { target: 'home', label: '홈', path: '/', icon: House },
-  { target: 'ai', label: 'AI와 상담하기', path: '/aiConsult?report=before', icon: MessageCircle },
+  { target: 'ai', label: 'AI와 상담하기', path: '/aiConsult', icon: MessageCircle },
   { target: 'sleep', label: '잠 잘오는 콘텐츠 추천', path: '/sleepContent', icon: MoonStar },
 ]
 

@@ -10,6 +10,8 @@ import type { SleepReport, SleepTrendPoint } from '../types/report'
 
 type AfterReportProps = {
   report: SleepReport
+  onGenerate: () => Promise<void>
+  isGenerating: boolean
 }
 
 function displayNumber(value: number | null, suffix: string, digits = 1) {
@@ -34,7 +36,7 @@ function dateLabel(value?: string) {
   return year && month && day ? `${year}.${month}.${day}` : value
 }
 
-export function AfterReport({ report }: AfterReportProps) {
+export function AfterReport({ report, onGenerate, isGenerating }: AfterReportProps) {
   const metrics: Array<{
     title: string
     value: string
@@ -61,8 +63,12 @@ export function AfterReport({ report }: AfterReportProps) {
     },
     {
       title: '평균 코골이',
-      value: displayNumber(report.metrics.snoringCount, '회'),
-      evaluation: evaluation(report.metrics.snoringCount, 'snoring'),
+      value: report.metrics.snoringCount === null && report.serverSnoringAverage != null
+        ? displayNumber(report.serverSnoringAverage, '')
+        : displayNumber(report.metrics.snoringCount, '회'),
+      evaluation: report.metrics.snoringCount === null && report.serverSnoringAverage != null
+        ? '단위 미제공'
+        : evaluation(report.metrics.snoringCount, 'snoring'),
       icon: <AudioLines className="size-7" />,
     },
     {
@@ -83,12 +89,17 @@ export function AfterReport({ report }: AfterReportProps) {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-2 text-[12px] text-[#616978]">
         <span className="rounded-full bg-[#eef3ff] px-3 py-1 font-semibold text-[#4578fa]">
-          {report.source === 'server' ? '서버 AI 리포트' : '서버 수면 기록 기반 리포트'}
+          {report.source === 'server' ? '저장된 수면 리포트' : '수면 기록 미리보기'}
         </span>
         <span>
-          {dateLabel(report.periodStart)}{report.periodEnd ? ` - ${dateLabel(report.periodEnd)}` : ''} · {report.recordCount}일 분석
+          {report.periodStart ? `${dateLabel(report.periodStart)} - ${dateLabel(report.periodEnd)}` : report.createdAt ? `${dateLabel(report.createdAt)} 생성` : '분석 기간 미제공'}
+          {report.recordCount > 0 ? ` · ${report.recordCount}일 분석` : ''}
         </span>
+        <button type="button" disabled={isGenerating} onClick={() => void onGenerate()} className="text-[13px] font-semibold text-[#4578fa] disabled:opacity-50">
+          {isGenerating ? '수면 기록 분석 중...' : '새 리포트 생성'}
+        </button>
       </div>
+      {report.notice && <p role="status" className="text-[13px] leading-6 text-[#616978]">{report.notice}</p>}
 
       <section aria-label="수면 리포트 핵심 지표" className="grid grid-cols-2 gap-4 md:grid-cols-3 3xl:grid-cols-6">
         {metrics.map((metric) => (
@@ -156,6 +167,19 @@ export function AfterReport({ report }: AfterReportProps) {
           </ul>
         </section>
       </div>
+      {Boolean(report.abnormalPatterns?.length) && (
+        <section className="border-t border-[#e3e8f0] px-2 py-5">
+          <h2 className="text-[21px] font-bold">특이 수면 기록</h2>
+          <ul className="mt-4 space-y-4">
+            {report.abnormalPatterns?.map((pattern, index) => (
+              <li key={`${pattern.date}-${index}`} className="text-[14px] leading-6">
+                <p className="font-semibold">{pattern.date} · {pattern.observation}</p>
+                <p className="text-[#616978]">{pattern.opinion}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </div>
   )
 }

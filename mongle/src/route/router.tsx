@@ -4,6 +4,7 @@ import Login from '../page/Login';
 import Signup from '../page/Signup';
 import AiConsult from '../page/AiConsultationPage';
 import SleepContent from '../page/SleepContentPage';
+import SleepReport from '../page/SleepReport';
 
 export const router =
     createBrowserRouter([
@@ -31,5 +32,10 @@ export const router =
             path: '/SleepContent',
             element:
                 <SleepContent />
+        },
+        {
+            path: '/report',
+            element:
+                <SleepReport />
         }
     ])

@@ -37,13 +37,11 @@ export default function Signup() {
                 pwd: password,
                 password,
             });
-
             setSuccess("회원가입이 완료되었습니다.");
 
             setTimeout(() => {
                 navigate("/login");
             }, 1000);
-
         } catch (error: any) {
             console.error("회원가입 실패:", error);
 
@@ -53,7 +51,6 @@ export default function Signup() {
             );
         }
     };
-
     return (
         <div className="min-h-screen flex flex-col items-center bg-[#F7F9FD] text-[#374151]">
 

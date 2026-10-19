@@ -5,6 +5,7 @@ import Login from "./page/Login";
 import Signup from "./page/Signup";
 import AiConsult from "./page/AiConsultationPage";
 import SleepContent from "./page/SleepContentPage";
+import SleepReport from "./page/SleepReport";
 
 function App() {
   return (

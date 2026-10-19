@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Header } from "../component/Header";
 import { Footer } from "../component/Footer";
 import api from "../api/api";
+import SleepReport, { type SleepReportHandle } from "./SleepReport";
 
 // ---------------- 타입 ----------------
 type VideoItem = {
@@ -204,6 +205,7 @@ function RankedCard({
     );
 }
 
+
 // ---------------- 일반 카드 ----------------
 function GridCard({
     item,
@@ -403,6 +405,11 @@ function AddVideoModal({
 
 // ---------------- 메인 페이지 ----------------
 export default function SleepContentPage() {
+    const [videoTitle, setVideoTitle] = useState("");
+    const [videoThumbnail, setVideoThumbnail] = useState("");
+    const [videoLink, setVideoLink] = useState("");
+
+
     const [videos, setVideos] = useState<VideoItem[]>(
         createDefaultVideos()
     );
@@ -434,6 +441,10 @@ export default function SleepContentPage() {
                 link: url,
             });
             console.log("등록 완료");
+
+            setVideoTitle(info.title);
+            setVideoThumbnail(info.thumbnail);
+            setVideoLink(url);
         } catch (error) {
             console.log("등록 실패");
             console.log(error);
@@ -451,27 +462,41 @@ export default function SleepContentPage() {
         setVideos((prev) => [newItem, ...prev]);
     };
 
-    const handleCardClick = (id: string) => {
-        setVideos((prev) =>
-            prev.map((v) =>
-                v.id === id
-                    ? { ...v, views: v.views + 1 }
-                    : v
-            )
-        );
+    const handleCardClick = async (id: string) => {
+        try {
+            await api.get(`/contents/${id}`)
 
-        const target = videos.find(
-            (v) => v.id === id
-        );
-
-        if (target?.url) {
-            window.open(
-                target.url,
-                "_blank",
-                "noopener,noreferrer"
+            setVideos((prev) =>
+                prev.map((v) =>
+                    v.id === id
+                        ? { ...v, views: v.views + 1 }
+                        : v
+                )
             );
+            const target = videos.find(
+                (v) => v.id === id
+            );
+
+            if (target?.url) {
+                window.open(
+                    target.url,
+                    "_blank",
+                    "noopener,noreferrer"
+                );
+            }
+        } catch (error) {
+            console.log(error);
         }
+
     };
+
+    const [recentReportId, setRecentReportId] = useState(null);
+    const hiddenReportRef = useRef<SleepReportHandle>(null);
+    const handleReportReady = async () => {
+        await hiddenReportRef.current?.downloadPDF();
+        setRecentReportId(null);
+    };
+
     // ---------------- 등록된 영상 불러오기 ----------------
     useEffect(() => {
         const fetchVideos = async () => {
@@ -605,6 +630,15 @@ export default function SleepContentPage() {
                     onClose={() => setModalOpen(false)}
                     onSubmit={handleAddVideo}
                 />
+            )}
+            {recentReportId && (
+                <div style={{ position: "fixed", top: 0, left: "-99999px" }}>
+                    <SleepReport
+                        ref={hiddenReportRef}
+                        reportId={recentReportId}
+                        onReady={handleReportReady}
+                    />
+                </div>
             )}
         </div>
     );

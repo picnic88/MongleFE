@@ -3,9 +3,14 @@ import {
   Check,
   Sparkles,
 } from 'lucide-react'
+import { useState, useEffect, useRef, useCallback } from 'react';
+import SleepReport, { type SleepReportHandle } from '../page/SleepReport';
+
 
 type BeforeReportProps = {
-  onGenerate: () => void
+  onGenerate: () => Promise<void>
+  isGenerating: boolean
+  error: string | null
 }
 
 const reportItems = [
@@ -16,17 +21,17 @@ const reportItems = [
   },
   {
     title: '수면 만족도',
-    description: '어젯밤 수면에 대한 만족도를 분석해요.',
+    description: '기록이 제공되면 만족도 변화를 분석해요.',
     icon: '/figma/before-img-smile.svg',
   },
   {
     title: 'REM 분석',
-    description: 'REM 비율과 패턴을 상세히 분석해요.',
+    description: '측정값이 제공되면 REM 패턴을 분석해요.',
     icon: '/figma/before-img-wave.svg',
   },
   {
     title: '코골이 분석',
-    description: '코골이 시간과 빈도를 분석해요.',
+    description: '코골이 감지 횟수와 변화를 분석해요.',
     iconNode: <AudioLines aria-hidden="true" className="size-7 text-[#4578fa]" strokeWidth={1.8} />,
   },
   {
@@ -42,15 +47,64 @@ const reportItems = [
 ]
 
 const checks = [
-  '최소 2주간의 수면 기록이 저장되어 있어야 해요.',
+  '저장된 수면 기록이 많을수록 변화 추이를 정확히 볼 수 있어요.',
   '온습도 데이터가 있을수록 더 정확해요.',
   '리포트 생성에는 잠시 시간이 걸릴 수 있어요.',
   '생성 후 AI 상담에서 자세히 질문할 수 있어요.',
 ]
 
-export function BeforeReport({ onGenerate }: BeforeReportProps) {
+const DESIGN_WIDTH = 1920;
+const DESIGN_HEIGHT = 1500;
+
+export function BeforeReport({ onGenerate, isGenerating, error }: BeforeReportProps) {
+
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+
+  useEffect(() => {
+    const updateScale = () => {
+      const containerWidth = wrapperRef.current
+        ? wrapperRef.current.offsetWidth
+        : window.innerWidth;
+
+      setScale(containerWidth / DESIGN_WIDTH);
+    };
+
+    updateScale();
+
+    window.addEventListener("resize", updateScale);
+
+    return () => {
+      window.removeEventListener("resize", updateScale);
+    };
+  }, []);
+
+  const [recentReportId, setRecentReportId] = useState<number | null>(null);
+  const [downloadReportId, setDownloadReportId] = useState<number | null>(null);
+  const isDownloadingRef = useRef(false);
+  const handleReportReady = useCallback(async () => {
+    console.log("handleReportReady 호출");
+    if (isDownloadingRef.current) {
+      console.log("이미 다운로드 중");
+      return;
+    }
+
+    isDownloadingRef.current = true;
+
+    try {
+      console.log("PDF 다운로드 실행");
+
+      await hiddenReportRef.current?.downloadPDF();
+    } finally {
+      setRecentReportId(null);
+      setDownloadReportId(null);
+      isDownloadingRef.current = false;
+    }
+  }, []);
+  const hiddenReportRef = useRef<SleepReportHandle>(null);
+
   return (
-    <div className="space-y-6">
+    <div ref={wrapperRef} className="space-y-6">
       <article className="grid min-h-[280px] overflow-hidden rounded-[18px] border border-[#e3e8f0] bg-white px-6 py-7 shadow-[0_4px_14px_rgba(31,46,77,0.06)] md:grid-cols-[210px_1fr] md:items-center md:py-6 lg:min-h-[250px]">
         <div className="relative mx-auto flex size-[170px] items-center justify-center">
           <img src="/figma/before-img2.svg" alt="" className="absolute inset-0 size-full" />
@@ -62,16 +116,31 @@ export function BeforeReport({ onGenerate }: BeforeReportProps) {
             이달의 수면 리포트가 아직 생성되지 않았어요
           </h2>
           <p className="mt-3 max-w-[690px] text-[14px] leading-6 text-[#616978] sm:text-[15px]">
-            지난 밤의 수면 기록을 바탕으로 AI가 온도, 습도, 수면 만족도,
-            <br className="hidden lg:block" /> 수면 점수, 코골이, REM 수면 데이터를 분석해 맞춤 리포트를 만들어드려요.
+            저장된 수면 기록을 바탕으로 수면 점수, 코골이 횟수, 온도와 습도를 분석해
+            <br className="hidden lg:block" /> 맞춤 리포트를 만들어드려요. 만족도와 REM은 측정값이 있을 때 함께 반영돼요.
           </p>
-          <button
+
+          {isGenerating ? <button
             type="button"
-            onClick={onGenerate}
+            onClick={() => void onGenerate()}
+            disabled={isGenerating}
             className="mt-5 min-h-12 rounded-[10px] bg-[#4578fa] px-7 text-[15px] font-bold text-white shadow-sm transition hover:bg-[#3769e8] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4578fa]"
           >
-            AI 수면 리포트 생성하기
-          </button>
+            수면 기록 분석 중...
+          </button> :
+            <button
+              type="button"
+              onClick={() => {
+                void onGenerate()
+              }}
+              disabled={isGenerating}
+              className="mt-5 min-h-12 rounded-[10px] bg-[#4578fa] px-7 text-[15px] font-bold text-white shadow-sm transition hover:bg-[#3769e8] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4578fa]"
+            >
+              AI 수면 리포트 생성하기
+            </button>
+          }
+
+          {error && <p role="alert" className="mt-3 text-[13px] font-medium text-[#d04444]">{error}</p>}
         </div>
       </article>
 
@@ -106,6 +175,16 @@ export function BeforeReport({ onGenerate }: BeforeReportProps) {
           ))}
         </ul>
       </section>
+      {(recentReportId || downloadReportId) && (
+        <div style={{ position: "fixed", top: 0, left: "-99999px" }}>
+          <SleepReport
+            key={recentReportId || downloadReportId}
+            ref={hiddenReportRef}
+            reportId={recentReportId || downloadReportId!}
+            onReady={handleReportReady}
+          />
+        </div>
+      )}
     </div>
   )
 }

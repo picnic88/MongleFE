@@ -81,23 +81,19 @@ export default function Login() {
 
             {/* 로그인 박스 */}
             <div className="bg-white w-[600px] min-h-[650px] flex flex-col items-center px-[10px] pt-[39px] mt-[0px] mb-[150px] rounded-[14px] border border-[#E5EAF2] shadow-[0_4px_20px_rgba(39,58,103,0.05)]">
-
                 {/* title */}
                 <div className="flex flex-col w-full items-center">
                     <p className="text-[28px] font-bold text-[#1F2937] tracking-tighter">
                         로그인
                     </p>
                 </div>
-
                 {/* main content */}
                 <div className="flex flex-col gap-[30px]">
-
                     {/* email */}
                     <div className="flex flex-col mt-[26px] w-[519px]">
                         <p className="text-[20px] text-[#374151]">
                             이메일
                         </p>
-
                         <div className="mt-[8px]">
                             <input
                                 type="email"
@@ -123,7 +119,6 @@ export default function Login() {
                                     focus:ring-[#C9D6F5]
                                 "
                             />
-
                             {emailFormErr && (
                                 <p className="mt-[5px] text-[14px] font-medium text-[#E77B7B]">
                                     유효한 이메일이 아닙니다. 다시 작성해주세요.
